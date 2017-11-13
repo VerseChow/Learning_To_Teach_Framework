@@ -3,19 +3,41 @@ import numpy as np
 
 class MNIST_Model():
 
-  def __init__(self, training=True, batch_size=50,
-              init_learning_rate=1e-4, reuse=None):
-    #self.threshold = config.threshold
+  def __init__(self, 
+              training=True, 
+              batch_size=50,
+              init_learning_rate=1e-4,
+              num_iterations = 20000,
+              reuse=None):
     self.training = training
     self.reuse = reuse
     self.batch_size = batch_size
     self.init_learning_rate = init_learning_rate
     self.learning_rate = tf.placeholder(tf.float32, shape=[], name='lr')
+    self.pretrained_weight_path = './pretrained_weight'
+    self.test_weight = './test_weight'
+    self.num_iterations = num_iterations
 
-    #self.learning_rate_decay = config.learning_rate_decay
-    #self.num_epoch = config.num_epoch
-    #self.saved_name = config.saved_name
-    #self.label = config.label
+  def chkpoint_restore(self, sess):
+    saver = tf.train.Saver(max_to_keep=2)
+    if self.training:
+        ckpt = tf.train.get_checkpoint_state(self.pretrained_weight_path)
+    else:
+        ckpt = tf.train.get_checkpoint_state(self.test_weight)
+
+    if ckpt and ckpt.model_checkpoint_path:
+        ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+        if self.training:
+            saver.restore(sess, os.path.join(self.pretrained_weight_path, ckpt_name))
+        else:
+            saver.restore(sess, os.path.join(self.test_weight, ckpt_name))
+        print('[*] Success to read {}'.format(ckpt_name))
+    else:
+        if self.training:
+            print('[*] Failed to find a checkpoint. Start training from scratch ...')
+        else:
+            raise ValueError('[*] Failed to find a checkpoint.')
+    return saver
   
   def conv_pool(self, x, num_filters, ksize=5, name='conv_pool'):
     with tf.variable_scope(name):
@@ -63,8 +85,8 @@ class MNIST_Model():
 
     return tf.nn.softmax(fc2, dim=-1), loss, prob
 
-  def train_setup(self, data, x, y):
-
+  def train(self, data, x, y):
+    # build model
     logits, loss, prob = self.build_model(x, y)
     
     with tf.name_scope('accuracy'):
@@ -76,36 +98,39 @@ class MNIST_Model():
     tf.summary.scalar('loss', loss)
     tf.summary.scalar('accuracy', accuracy)
     tf.summary.scalar('learning_rate', self.learning_rate)
-    sum_all = tf.summary.merge_all()
-
+    
     num_param = 0
     vars_trainable = tf.trainable_variables()
 
     for var in vars_trainable:
       num_param += np.prod(var.get_shape()).value
       tf.summary.histogram(var.name, var)
-
+    sum_all = tf.summary.merge_all()
+    # set up trainner
     with tf.name_scope('adam_optimizer'):
       train_step = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(loss, var_list=vars_trainable)
 
     print('\nTotal nummber of parameters = %d' % num_param)
 
     lr = self.init_learning_rate
+
+    # training
     with tf.Session() as sess:
       sess.run(tf.global_variables_initializer())
       writer = tf.summary.FileWriter("./logs", sess.graph)
-      for i in range(20000):
+      saver = self.chkpoint_restore(sess)
+
+      for i in range(self.num_iterations):
         batch = data.train.next_batch(self.batch_size)
         if i % 100 == 0:
-          print(logits.eval(feed_dict={
-              x: batch[0], y: batch[1], prob: 1.0}))
-          print(y.eval(feed_dict={
-              x: batch[0], y: batch[1], prob: 1.0}))
           train_accuracy = accuracy.eval(feed_dict={
               x: batch[0], y: batch[1], prob: 1.0})
           print('step %d, training accuracy %g' % (i, train_accuracy))
+        if i % 1000 == 0:
+          print('Saving checkpoint ...')
+          saver.save(sess, self.test_weight + '/MNIST.ckpt')
+
         train_step.run(feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5})
         writer.add_summary(sess.run(sum_all, feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5}), i)
 
-  #def train_agent(self, data):
     

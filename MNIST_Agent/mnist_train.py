@@ -8,6 +8,4 @@ y = tf.placeholder(tf.float32, [None, 10])
 
 train_agent = MNIST_Model()
 
-train_agent.train_setup(mnist, x, y)
-
-#train_agent.train_agent(mnist)
+train_agent.train(mnist, x, y)
