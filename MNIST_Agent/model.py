@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import os
 
 class MNIST_Model():
 
@@ -122,6 +123,7 @@ class MNIST_Model():
 
       for i in range(self.num_iterations):
         batch = data.train.next_batch(self.batch_size)
+
         if i % 100 == 0:
           train_accuracy = accuracy.eval(feed_dict={
               x: batch[0], y: batch[1], prob: 1.0})
@@ -133,4 +135,25 @@ class MNIST_Model():
         train_step.run(feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5})
         writer.add_summary(sess.run(sum_all, feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5}), i)
 
+
+  def train_one_step(self, batch, x, y, sess=None):
+    logits, loss, prob = self.build_model(x, y)
+
+    with tf.name_scope('accuracy'):
+      correct_prediction = tf.equal(tf.argmax(logits, -1), tf.argmax(y, -1))
+      correct_prediction = tf.cast(correct_prediction, tf.float32)
+
+    accuracy = tf.reduce_mean(correct_prediction)
+    vars_trainable = tf.trainable_variables()
+
+
+    with tf.name_scope('adam_optimizer'):
+      train_step = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(loss, var_list=vars_trainable)
+
+    with (sess or tf.get_default_session()) as sess:
+      sess.run(tf.global_variables_initializer())
+      train_accuracy = accuracy.eval(feed_dict={
+        x: batch[0], y: batch[1], prob: 1.0})
+      print(' training accuracy %g' % (train_accuracy))
+      train_step.run(feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate, prob: 0.5})
     
