@@ -156,4 +156,3 @@ class MNIST_Model():
         x: batch[0], y: batch[1], prob: 1.0})
       print(' training accuracy %g' % (train_accuracy))
       train_step.run(feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate, prob: 0.5})
-    
