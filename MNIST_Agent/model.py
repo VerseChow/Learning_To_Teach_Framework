@@ -1,8 +1,11 @@
+import __init__
+
 from scipy.stats import rankdata
 import tensorflow as tf
 import numpy as np
 import os
 import sys
+import Teacher_Agent.model as t
 
 class MNIST_Model():
 
@@ -22,7 +25,6 @@ class MNIST_Model():
         self.num_iterations = num_iterations
         self.average_loss = 0.0
         self.best_loss = 100.0
-        #self.average_loss = tf.constant(0, shape=[1], dtype=tf.float32)
 
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
@@ -179,9 +181,12 @@ class MNIST_Model():
         return feature
 
 
-    def train_one_step_setup(self, x, y, sess):
+    def train_one_step_setup(self, x, y, feature_state, sess):
 
         self.label_pred, self.logits, self.loss, self.prob = self.build_model(x, y)
+        # Build Teacher Agent
+        teacher = t.TeacherAgent()
+        self.action_space, self.action, self.action_prob = teacher.build_model(feature_state)
 
         with tf.name_scope('accuracy'):
             correct_prediction = tf.equal(tf.argmax(self.label_pred, -1), tf.argmax(y, -1))
@@ -190,18 +195,22 @@ class MNIST_Model():
         self.accuracy = tf.reduce_mean(correct_prediction)
         vars_trainable = tf.trainable_variables()
 
-
         with tf.name_scope('adam_optimizer'):
             self.train_step = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss, var_list=vars_trainable)
 
         sess.run(tf.global_variables_initializer())
 
 
-    def train_one_step(self, batch, x, y, sess, iteration_index):
+    def train_one_step(self, batch, x, y, feature_state, sess, iteration_index):
         [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
             feed_dict={x: batch[0], y: batch[1], self.prob: 1.0})
         print(' training accuracy %g' % (train_accuracy))
-        feature_state = self.feature_state(batch[1], label_pred, logits, loss, iteration_index)
+        # feed to teacher agent        
+        features = self.feature_state(batch[1], label_pred, logits, loss, iteration_index)
+        action_space, action = sess.run([self.action_space, self.action], feed_dict={feature_state: features, self.action_prob: 1.0})
+        print action_space
+        print action
+        
         self.train_step.run(
             feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate,
             self.prob: 0.5})
