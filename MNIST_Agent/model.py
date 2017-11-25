@@ -1,6 +1,8 @@
+from scipy.stats import rankdata
 import tensorflow as tf
 import numpy as np
 import os
+import sys
 
 class MNIST_Model():
 
@@ -18,6 +20,9 @@ class MNIST_Model():
         self.pretrained_weight_path = './pretrained_weight'
         self.test_weight = './test_weight'
         self.num_iterations = num_iterations
+        self.average_loss = 0.0
+        self.best_loss = 100.0
+        #self.average_loss = tf.constant(0, shape=[1], dtype=tf.float32)
 
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
@@ -84,7 +89,9 @@ class MNIST_Model():
 
         loss = tf.reduce_mean(logits)
 
-        return tf.nn.softmax(fc2, dim=-1), loss, prob
+        label_pred = tf.nn.softmax(fc2, dim=-1)
+
+        return label_pred, logits, loss, prob
 
     def train(self, data, x, y):
         # build model
@@ -135,13 +142,49 @@ class MNIST_Model():
                 train_step.run(feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5})
                 writer.add_summary(sess.run(sum_all, feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5}), i)
 
+    def feature_state(self, label, label_pred, logits, loss, iter_index):
+        self.average_loss = self.average_loss+(loss-self.average_loss)/(1+iter_index)
+        self.best_loss = np.minimum(np.amin(logits), self.best_loss)
+        margin_value = np.array([])
+        # Calculate margin value
+        for i in range(self.batch_size):
+            l = label[i]
+            l_p = label_pred[i]
+            indx = np.argmax(l)
+            P = l_p[indx]
+            l_p[indx] = 0.0
+            P = P-l_p[np.argmax(l_p)]
+            margin_value = np.append(margin_value, P)
+        # Rank the data
+        margin_rank = rankdata(margin_value, 'min')
+        loss_rank = rankdata(logits, 'min')
+        # predefine feature state
+        feature = np.zeros([self.batch_size, 25])
+        # constuct feature state
+        for i in range(self.batch_size):
+            # Date features
+            feature[i, 0:10] = label[i]
+            # Model fearures
+            feature[i, 10] = iter_index
+            feature[i, 11] = self.average_loss
+            feature[i, 12] = self.best_loss
+            # Combined features
+            feature[i, 13:23] = label_pred[i]
+            # normalized rank
+            m_r = float(margin_rank[i]-1)/(self.batch_size-1)
+            l_r = float(loss_rank[i]-1)/(self.batch_size-1)
+            feature[i, 23] = l_r
+            feature[i, 24] = m_r
+        feature.astype(float)
+        return feature
+
 
     def train_one_step_setup(self, x, y, sess):
 
-        logits, loss, self.prob = self.build_model(x, y)
+        self.label_pred, self.logits, self.loss, self.prob = self.build_model(x, y)
 
         with tf.name_scope('accuracy'):
-            correct_prediction = tf.equal(tf.argmax(logits, -1), tf.argmax(y, -1))
+            correct_prediction = tf.equal(tf.argmax(self.label_pred, -1), tf.argmax(y, -1))
             correct_prediction = tf.cast(correct_prediction, tf.float32)
 
         self.accuracy = tf.reduce_mean(correct_prediction)
@@ -149,15 +192,16 @@ class MNIST_Model():
 
 
         with tf.name_scope('adam_optimizer'):
-            self.train_step = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(loss, var_list=vars_trainable)
+            self.train_step = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss, var_list=vars_trainable)
 
-        # with (sess or tf.get_default_session()):
         sess.run(tf.global_variables_initializer())
 
 
-    def train_one_step(self, batch, x, y):
-        train_accuracy = self.accuracy.eval(feed_dict={
-            x: batch[0], y: batch[1], self.prob: 1.0})
+    def train_one_step(self, batch, x, y, sess, iteration_index):
+        [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
+            feed_dict={x: batch[0], y: batch[1], self.prob: 1.0})
         print(' training accuracy %g' % (train_accuracy))
+        feature_state = self.feature_state(batch[1], label_pred, logits, loss, iteration_index)
         self.train_step.run(
-            feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate, self.prob: 0.5})
+            feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate,
+            self.prob: 0.5})
