@@ -38,3 +38,10 @@ class TeacherAgent():
         action = tf.round(action_space, name='round')
 
         return action_space, action, prob
+
+    def estimate(self,sess,action_space, action, action_prob, features, feature_state):
+
+        action_space, action = sess.run([action_space, action],
+                                        feed_dict={feature_state: features, action_prob: 1.0})
+        return action_space,action
+

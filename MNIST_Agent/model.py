@@ -25,7 +25,7 @@ class MNIST_Model():
         self.num_iterations = num_iterations
         self.average_loss = 0.0
         self.best_loss = 100.0
-
+        self.start_train_num = 100
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
         if self.training:
@@ -185,8 +185,8 @@ class MNIST_Model():
 
         self.label_pred, self.logits, self.loss, self.prob = self.build_model(x, y)
         # Build Teacher Agent
-        teacher = t.TeacherAgent()
-        self.action_space, self.action, self.action_prob = teacher.build_model(feature_state)
+        self.teacher = t.TeacherAgent()
+        self.action_space, self.action, self.action_prob = self.teacher.build_model(feature_state)
 
         with tf.name_scope('accuracy'):
             correct_prediction = tf.equal(tf.argmax(self.label_pred, -1), tf.argmax(y, -1))
@@ -202,15 +202,30 @@ class MNIST_Model():
 
 
     def train_one_step(self, batch, x, y, feature_state, sess, iteration_index):
+        new_batch_data = [];
+        new_batch_label = [];
         [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
             feed_dict={x: batch[0], y: batch[1], self.prob: 1.0})
         print(' training accuracy %g' % (train_accuracy))
         # feed to teacher agent        
         features = self.feature_state(batch[1], label_pred, logits, loss, iteration_index)
-        action_space, action = sess.run([self.action_space, self.action], feed_dict={feature_state: features, self.action_prob: 1.0})
-        print action_space
-        print action
-        
-        self.train_step.run(
-            feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate,
-            self.prob: 0.5})
+        action_space, action = self.teacher.estimate(sess,self.action_space, self.action,self.action_prob,features,feature_state)
+        # action_space, action = sess.run([self.action_space, self.action], feed_dict={feature_state: features, self.action_prob: 1.0})
+
+        for i,j in enumerate(action):
+            if j == 1:
+                new_batch_data.append(batch[0][i])
+                new_batch_label.append(batch[1][i])
+
+        print(len(new_batch_data))
+
+
+        if len(new_batch_data) != 0 and self.start_train_num <=0:
+            self.train_step.run(
+                feed_dict={x: new_batch_data, y: new_batch_label, self.learning_rate: self.init_learning_rate,
+                self.prob: 0.5})
+        elif self.start_train_num >0:
+            self.train_step.run(
+                feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate,
+                           self.prob: 0.5})
+            self.start_train_num = self.start_train_num - 1
