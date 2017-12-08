@@ -6,6 +6,7 @@ import numpy as np
 import os
 import sys
 import Teacher_Agent.model as t
+import math
 
 class MNIST_Model():
 
@@ -25,7 +26,11 @@ class MNIST_Model():
         self.num_iterations = num_iterations
         self.average_loss = 0.0
         self.best_loss = 100.0
-        self.start_train_num = 100
+        self.start_train_num = 3
+        self.student_trajectory = []
+        self.reward = []
+        self.T_max = 100
+
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
         if self.training:
@@ -186,17 +191,17 @@ class MNIST_Model():
         self.label_pred, self.logits, self.loss, self.prob = self.build_model(x, y)
         # Build Teacher Agent
         self.teacher = t.TeacherAgent()
-        self.action_space, self.action, self.action_prob = self.teacher.build_model(feature_state)
+        action_space, action, action_prob = self.teacher.build_model(feature_state)
 
         with tf.name_scope('accuracy'):
             correct_prediction = tf.equal(tf.argmax(self.label_pred, -1), tf.argmax(y, -1))
             correct_prediction = tf.cast(correct_prediction, tf.float32)
 
         self.accuracy = tf.reduce_mean(correct_prediction)
-        vars_trainable = tf.trainable_variables()
+        self.vars_trainable = tf.trainable_variables()
 
         with tf.name_scope('adam_optimizer'):
-            self.train_step = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss, var_list=vars_trainable)
+            self.train_step = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss, var_list=self.vars_trainable)
 
         sess.run(tf.global_variables_initializer())
 
@@ -209,23 +214,32 @@ class MNIST_Model():
         print(' training accuracy %g' % (train_accuracy))
         # feed to teacher agent        
         features = self.feature_state(batch[1], label_pred, logits, loss, iteration_index)
-        action_space, action = self.teacher.estimate(sess,self.action_space, self.action,self.action_prob,features,feature_state)
+        action_space, action = self.teacher.estimate(sess,features,feature_state)
         # action_space, action = sess.run([self.action_space, self.action], feed_dict={feature_state: features, self.action_prob: 1.0})
 
         for i,j in enumerate(action):
             if j == 1:
                 new_batch_data.append(batch[0][i])
                 new_batch_label.append(batch[1][i])
+                self.student_trajectory.append(features[i])
+                self.reward.append(0)
 
-        print(len(new_batch_data))
-
+        if train_accuracy >= 0.90:
+            print(len(self.reward))
+            self.reward[-1] = -math.log(len(self.reward)/self.T_max)
+            re_initialize_para = tf.initialize_variables(self.vars_trainable)
+            sess.run(re_initialize_para)
+            self.student_trajectory.clear()
+            self.reward.clear()
 
         if len(new_batch_data) != 0 and self.start_train_num <=0:
             self.train_step.run(
                 feed_dict={x: new_batch_data, y: new_batch_label, self.learning_rate: self.init_learning_rate,
                 self.prob: 0.5})
         elif self.start_train_num >0:
+            print(self.start_train_num)
             self.train_step.run(
                 feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate,
                            self.prob: 0.5})
             self.start_train_num = self.start_train_num - 1
+
