@@ -37,21 +37,18 @@ class TeacherAgent():
 
             fc2 = self.fc_relu(dpout, 1024, 1, name='fc_relu1')
 
-            self.action_space = tf.nn.sigmoid(fc2, name='sigmoid')
-            self.action = tf.round(self.action_space, name='round')
-            self.loss = -tf.log(self.action_space) * self.target
+            self.action = tf.nn.sigmoid(fc2, name='sigmoid')
+            self.loss = -tf.log(self.action) * self.target
+
         var_list = tf.trainable_variables(scope='teacher_model')
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-        self.train_op = self.optimizer.minimize(
-                self.loss,var_list=var_list)
+        self.train_op = self.optimizer.minimize(self.loss, var_list=var_list)
 
-        return self.action_space, self.action, self.prob
+        return self.action, self.prob
 
     def estimate(self,sess, features, feature_state):
-
-        action_space, action = sess.run([self.action_space, self.action],
-                                        feed_dict={feature_state: features, self.prob: 1.0})
-        return action_space,action
+        action = sess.run([self.action], feed_dict={feature_state: features, self.prob: 1.0})
+        return action
 
 
     def update(self,sess, target, features, feature_state):
