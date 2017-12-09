@@ -159,7 +159,7 @@ class MNIST_Model():
         for i in range(self.batch_size):
             l = label[i]
             l_p = label_pred[i]
-            indx = np.argmax(l)
+            indx = np.argmax(l_p)
             P = l_p[indx]
             l_p[indx] = 0.0
             P = P-l_p[np.argmax(l_p)]
@@ -214,7 +214,8 @@ class MNIST_Model():
         [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
             feed_dict={x: batch[0], y: batch[1], self.prob: 1.0})
         print(' training accuracy %g' % (train_accuracy))
-        # feed to teacher agent        
+        # feed to teacher agent
+
         features = self.feature_state(batch[1], label_pred, logits, loss, iteration_index)
         action_space, action = self.teacher.estimate(sess,features,feature_state)
         # action_space, action = sess.run([self.action_space, self.action], feed_dict={feature_state: features, self.action_prob: 1.0})
@@ -227,16 +228,19 @@ class MNIST_Model():
                 self.reward.append(0)
 
         if train_accuracy >= 0.90:
+            tf.reshape(feature_state,[25,1])
             print(len(self.reward))
             if len(self.reward) > 0:
                 self.reward[-1] = -math.log(len(self.reward)/self.T_max)
                 for t in range(len(self.reward)):
                     total_return  = sum(self.discount_factor**i * j for i, j in enumerate(self.reward[t:]))
-                    self.teacher.update(sess,total_return,self.student_trajectory[t],feature_state)
+                    # print(len(self.student_trajectory[t]))
+                    self.teacher.update(sess,total_return,[self.student_trajectory[t]],feature_state)
             re_initialize_para = tf.initialize_variables(self.vars_trainable)
             sess.run(re_initialize_para)
             self.student_trajectory.clear()
             self.reward.clear()
+            tf.reshape(feature_state, [-1, 25])
 
         if len(new_batch_data) != 0 and self.start_train_num <=0:
             self.train_step.run(
