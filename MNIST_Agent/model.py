@@ -15,6 +15,7 @@ class MNIST_Model():
                  batch_size=50,
                  init_learning_rate=1e-4,
                  num_iterations = 20000,
+                 discount_factor = 1,
                  reuse=None):
         self.training = training
         self.reuse = reuse
@@ -26,10 +27,11 @@ class MNIST_Model():
         self.num_iterations = num_iterations
         self.average_loss = 0.0
         self.best_loss = 100.0
-        self.start_train_num = 3
+        self.start_train_num = 100
         self.student_trajectory = []
         self.reward = []
         self.T_max = 100
+        self.discount_factor = discount_factor
 
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
@@ -226,7 +228,11 @@ class MNIST_Model():
 
         if train_accuracy >= 0.90:
             print(len(self.reward))
-            self.reward[-1] = -math.log(len(self.reward)/self.T_max)
+            if len(self.reward) > 0:
+                self.reward[-1] = -math.log(len(self.reward)/self.T_max)
+                for t in range(len(self.reward)):
+                    total_return  = sum(self.discount_factor**i * j for i, j in enumerate(self.reward[t:]))
+                    self.teacher.update(sess,total_return,self.student_trajectory[t],feature_state)
             re_initialize_para = tf.initialize_variables(self.vars_trainable)
             sess.run(re_initialize_para)
             self.student_trajectory.clear()

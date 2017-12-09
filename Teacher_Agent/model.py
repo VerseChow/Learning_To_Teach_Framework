@@ -13,6 +13,7 @@ class TeacherAgent():
             self.batch_size = batch_size
             self.state_size = state_size
             self.target = tf.placeholder(dtype=tf.float32, name="target")
+            self.learning_rate = learning_rate
 
     def fc_relu(self, x, num, num_filters, name='fc_relu'):
         with tf.variable_scope(name):
@@ -29,17 +30,20 @@ class TeacherAgent():
         return x, prob
 
     def build_model(self, x):
+        with tf.variable_scope('teacher_model'):
+            fc1 = self.fc_relu(x, 25, 1024, name='fc_relu1')
 
-        fc1 = self.fc_relu(x, 25, 1024, name='fc_relu1')
+            dpout, self.prob = self.dropout(fc1, name='dropout')
 
-        dpout, self.prob = self.dropout(fc1, name='dropout')
+            fc2 = self.fc_relu(dpout, 1024, 1, name='fc_relu1')
 
-        fc2 = self.fc_relu(dpout, 1024, 1, name='fc_relu1')
-
-        self.action_space = tf.nn.sigmoid(fc2, name='sigmoid')
-        self.action = tf.round(self.action_space, name='round')
-        self.loss = -tf.log(self.action_space) * self.target
-
+            self.action_space = tf.nn.sigmoid(fc2, name='sigmoid')
+            self.action = tf.round(self.action_space, name='round')
+            self.loss = -tf.log(self.action_space) * self.target
+        var_list = tf.trainable_variables(scope='teacher_model')
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+        self.train_op = self.optimizer.minimize(
+                self.loss,var_list=var_list)
 
         return self.action_space, self.action, self.prob
 
@@ -50,4 +54,7 @@ class TeacherAgent():
         return action_space,action
 
 
-   
+    def update(self,sess, target, features, feature_state):
+        feed_dict = {feature_state: features, self.prob: 0.5, self.target: target}
+        _,loss = sess.run([self.train_op, self.loss], feed_dict)
+        return loss
