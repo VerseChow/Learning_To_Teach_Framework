@@ -30,8 +30,10 @@ class MNIST_Model():
         self.start_train_num = -1
         self.student_trajectory = []
         self.reward = []
-        self.T_max = 100
+        self.T_max = 1000
         self.discount_factor = discount_factor
+        self.new_batch_data = [];
+        self.new_batch_label = [];
 
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
@@ -77,26 +79,27 @@ class MNIST_Model():
         return x, prob
 
     def build_model(self, x, y):
+        with tf.variable_scope('student_model'):
 
-        with tf.name_scope('reshape'):
-            x = tf.reshape(x, [-1, 28, 28, 1])
+            with tf.name_scope('reshape'):
+                x = tf.reshape(x, [-1, 28, 28, 1])
 
-        cov1 = self.conv_pool(x, 32, name='conv_pool1')
+            cov1 = self.conv_pool(x, 32, name='conv_pool1')
 
-        cov2 = self.conv_pool(cov1, 64, name='conv_pool2')
+            cov2 = self.conv_pool(cov1, 64, name='conv_pool2')
 
-        with tf.name_scope('flatten'):
-            flatten = tf.layers.flatten(cov2)
+            with tf.name_scope('flatten'):
+                flatten = tf.layers.flatten(cov2)
 
-        fc1 = self.fc_relu(flatten, 7*7*64, 1024, name='fc_relu1')
+            fc1 = self.fc_relu(flatten, 7*7*64, 1024, name='fc_relu1')
 
-        dpout, prob = self.dropout(fc1, name='dropout')
+            dpout, prob = self.dropout(fc1, name='dropout')
 
-        fc2 = self.fc_relu(dpout, 1024, 10, name='fc_relu1')
+            fc2 = self.fc_relu(dpout, 1024, 10, name='fc_relu1')
 
-        logits = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=fc2)
+            logits = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=fc2)
 
-        loss = tf.reduce_mean(logits)
+            loss = tf.reduce_mean(logits)
 
         label_pred = tf.nn.softmax(fc2, dim=-1)
 
@@ -117,7 +120,7 @@ class MNIST_Model():
         tf.summary.scalar('learning_rate', self.learning_rate)
 
         num_param = 0
-        vars_trainable = tf.trainable_variables()
+        vars_trainable = tf.trainable_variables(scope = 'student_model')
 
         for var in vars_trainable:
             num_param += np.prod(var.get_shape()).value
@@ -174,9 +177,9 @@ class MNIST_Model():
             # Date features
             feature[i, 0:10] = label[i]
             # Model fearures
-            feature[i, 10] = iter_index
-            feature[i, 11] = self.average_loss
-            feature[i, 12] = self.best_loss
+            feature[i, 10] = iter_index/self.T_max
+            feature[i, 11] = self.average_loss/self.T_max
+            feature[i, 12] = self.best_loss/self.T_max
             # Combined features
             feature[i, 13:23] = label_pred[i]
             # normalized rank
@@ -191,16 +194,16 @@ class MNIST_Model():
     def train_one_step_setup(self, x, y, feature_state, sess):
 
         self.label_pred, self.logits, self.loss, self.prob = self.build_model(x, y)
+        self.vars_trainable = tf.trainable_variables()
         # Build Teacher Agent
         self.teacher = t.TeacherAgent()
-        action, action_prob = self.teacher.build_model(feature_state)
+        action_prob, prob = self.teacher.build_model(feature_state)
 
         with tf.name_scope('accuracy'):
             correct_prediction = tf.equal(tf.argmax(self.label_pred, -1), tf.argmax(y, -1))
             correct_prediction = tf.cast(correct_prediction, tf.float32)
 
         self.accuracy = tf.reduce_mean(correct_prediction)
-        self.vars_trainable = tf.trainable_variables()
 
         with tf.name_scope('adam_optimizer'):
             self.train_step = tf.train.AdamOptimizer(learning_rate=self.learning_rate).minimize(self.loss, var_list=self.vars_trainable)
@@ -209,8 +212,7 @@ class MNIST_Model():
 
 
     def train_one_step(self, batch, x, y, feature_state, sess, iteration_index):
-        new_batch_data = [];
-        new_batch_label = [];
+
         [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
             feed_dict={x: batch[0], y: batch[1], self.prob: 1.0})
         print(' training accuracy %g' % (train_accuracy))
@@ -218,37 +220,39 @@ class MNIST_Model():
 
         features = self.feature_state(batch[1], label_pred, logits, loss, iteration_index)
         action_prob = self.teacher.estimate(sess, features, feature_state)
-        # action_space, action = sess.run([self.action_space, self.action], feed_dict={feature_state: features, self.action_prob: 1.0})
-
+        # construct new batch of data based on the action_prob
         for i, prob in enumerate(action_prob[0]):
-            print(prob)
+            #print(prob)
             action = np.random.choice(2, 1, p=[1.0-prob[0], prob[0]])
-            if action[0] == 1:
-                new_batch_data.append(batch[0][i])
-                new_batch_label.append(batch[1][i])
+            if action[0] == 1 and len(self.new_batch_data) != 50:
+                self.new_batch_data.append(batch[0][i])
+                self.new_batch_label.append(batch[1][i])
+                # append reward and features
                 self.student_trajectory.append(features[i])
                 self.reward.append(0)
-
+        # terminate trajectory episode and calculate rewards
         if train_accuracy >= 0.90:
-            tf.reshape(feature_state,[25,1])
+            #tf.reshape(feature_state, [25,1])
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
                 self.reward[-1] = -math.log(len(self.reward)/self.T_max)
                 for t in range(len(self.reward)):
-                    total_return  = sum(self.discount_factor**i * j for i, j in enumerate(self.reward[t:]))
+                    total_return = sum(self.discount_factor**i * j for i, j in enumerate(self.reward[t:]))
                     # print(len(self.student_trajectory[t]))
-                    self.teacher.update(sess,total_return, [self.student_trajectory[t]], feature_state)
+                    self.teacher.update(sess, total_return, self.student_trajectory[t].reshape(1, 25), feature_state)
 
             re_initialize_para = tf.variables_initializer(self.vars_trainable)
             sess.run(re_initialize_para)
             self.student_trajectory.clear()
             self.reward.clear()
-            tf.reshape(feature_state, [-1, 25])
-
-        if len(new_batch_data) != 0 and self.start_train_num <=0:
+            #tf.reshape(feature_state, [-1, 25])
+        if len(self.new_batch_data) == 50 and self.start_train_num <=0:
             self.train_step.run(
-                feed_dict={x: new_batch_data, y: new_batch_label, self.learning_rate: self.init_learning_rate,
+                feed_dict={x: self.new_batch_data, y: self.new_batch_label, self.learning_rate: self.init_learning_rate,
                 self.prob: 0.5})
+            self.new_batch_data = []
+            self.new_batch_label = []
+
         #elif self.start_train_num >0:
         #    print(self.start_train_num)
         #    self.train_step.run(

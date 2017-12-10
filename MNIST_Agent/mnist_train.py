@@ -12,5 +12,5 @@ train_agent = MNIST_Model()
 
 with tf.Session() as sess:
     train_agent.train_one_step_setup(x, y, feature_state, sess)
-    for i in range(1000):
+    for i in range(140000):
         train_agent.train_one_step(mnist.train.next_batch(50), x, y, feature_state, sess, i)
