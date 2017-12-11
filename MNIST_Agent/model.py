@@ -7,7 +7,7 @@ import os
 import sys
 import Teacher_Agent.model as t
 import math
-from tensorflow.examples.tutorials.mnist import input_data
+
 class MNIST_Model():
 
     def __init__(self,
@@ -34,26 +34,6 @@ class MNIST_Model():
         self.discount_factor = discount_factor
         self.new_batch_data = [];
         self.new_batch_label = [];
-        self.mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
-        self.mnist_l = int(self.mnist.train.images.shape[0])
-        self.mnist_indexes = list(range(self.mnist_l))
-        np.random.shuffle(self.mnist_indexes)
-        self.half_l = int(self.mnist.train.images.shape[0]/2)
-        self.train_teach_indexes = self.mnist_indexes[:self.half_l]
-        self.train_student_indexes = self.mnist_indexes[self.half_l:]
-        '''
-        #this shows how to read minist data
-        self.mnist_train_teach_img = mnist.train.images[:half_l,:]
-        self.mnist_train_teach_lbl = mnist.train.labels[:half_l,:]
-        self.mnist_train_stud_img = mnist.train.images[half_l:, :]
-        self.mnist_train_stud_lbl = mnist.train.labels[half_l:, :]
-        '''
-        self.D_dev_l = int(self.half_l*0.05)
-        temp_train_teach_indexes = self.train_teach_indexes[:]#deep copy
-        np.random.shuffle(temp_train_teach_indexes)
-        self.D_dev_indexes = temp_train_teach_indexes[:self.D_dev_l]
-
-
 
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
@@ -232,27 +212,21 @@ class MNIST_Model():
 
 
     def train_one_step(self, batch, x, y, feature_state, sess, iteration_index):
-        #get one batch from train_teach
-        temp_train_teach_indexes = self.train_teach_indexes[:]
-        np.random.shuffle(temp_train_teach_indexes)
-        batch_indexes = temp_train_teach_indexes[:self.batch_size]
-        batch_img = self.mnist.train.images[batch_indexes,:]
-        batch_lbl = self.mnist.train.labels[batch_indexes,:]
 
         [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
-            feed_dict={x: batch_img, y: batch_lbl, self.prob: 1.0})
+            feed_dict={x: batch[0], y: batch[1], self.prob: 1.0})
         print(' training accuracy %g' % (train_accuracy))
         # feed to teacher agent
 
-        features = self.feature_state(batch_lbl, label_pred, logits, loss, iteration_index)
+        features = self.feature_state(batch[1], label_pred, logits, loss, iteration_index)
         action_prob = self.teacher.estimate(sess, features, feature_state)
         # construct new batch of data based on the action_prob
         for i, prob in enumerate(action_prob[0]):
             #print(prob)
             action = np.random.choice(2, 1, p=[1.0-prob[0], prob[0]])
             if action[0] == 1 and len(self.new_batch_data) != 50:
-                self.new_batch_data.append(batch_img[i,:])
-                self.new_batch_label.append(batch_lbl[i,:])
+                self.new_batch_data.append(batch[0][i])
+                self.new_batch_label.append(batch[1][i])
                 # append reward and features
                 self.student_trajectory.append(features[i])
                 self.reward.append(0)

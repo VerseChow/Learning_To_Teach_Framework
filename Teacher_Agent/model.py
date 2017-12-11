@@ -7,13 +7,16 @@ class TeacherAgent():
                 batch_size=50,
                 state_size=25,
                 reuse=None,
-                learning_rate=0.0001):
+                learning_rate=0.001):
             self.training = training
             self.reuse = reuse
             self.batch_size = batch_size
             self.state_size = state_size
             self.target = tf.placeholder(dtype=tf.float32, name="target")
+            self.average_reward_tf = tf.placeholder(dtype=tf.float32, name="average_reward")
             self.learning_rate = learning_rate
+            self.episode_count = 0.0
+            self.average_reward = 0.0
 
     def fc(self, x, num, num_filters, bias=0.0, name='fc'):
         with tf.variable_scope(name):
@@ -42,28 +45,28 @@ class TeacherAgent():
             fc1 = self.fc(x, 25, 12, name='fc1')
             dpout, self.prob = self.dropout(fc1, name='dropout')
             tanh1 = tf.nn.tanh(dpout, name='tanh')
-            #dpout = tf.reshape(dpout, shape=[-1, 1024, 1])
-            #conv1 = self.conv1d_relu(dpout, 1, 3, 1, name='conv1d_relu1')
-            #conv1 = tf.reshape(conv1, shape=[-1, 1024])
             fc2 = self.fc(tanh1, 12, 1, bias=2.0, name='fc2')
             self.action = tf.nn.sigmoid(fc2, name='sigmoid')
-            logits = -tf.log(self.action) * self.target
-            self.loss = tf.reduce_mean(logits)
+            logits = tf.log(self.action) * (self.target-self.average_reward_tf)
+            self.loss = tf.reduce_sum(logits)
+
         var_list = tf.trainable_variables(scope='teacher_model')
         self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
         self.train_op = self.optimizer.minimize(self.loss, var_list=var_list)
 
         return self.action, self.prob
 
-    def estimate(self,sess, features, feature_state):
+    def estimate(self, sess, features, feature_state):
         action = sess.run([self.action], feed_dict={feature_state: features, self.prob: 1.0})
         print(action)
         return action
 
-
-    def update(self,sess, target, features, feature_state):
+    def update(self, sess, target, features, feature_state):
         print ('update')
-        feed_dict = {feature_state: features, self.prob: 0.5, self.target: target}
+        self.average_reward = self.average_reward+(target-self.average_reward)/(1.0+self.episode_count)
+        self.episode_count += 1.0
+        feed_dict = {feature_state: features, self.prob: 0.5, self.target: target,
+                    self.average_reward_tf: self.average_reward}
         _,loss = sess.run([self.train_op, self.loss], feed_dict)
         print(loss)
         return loss
