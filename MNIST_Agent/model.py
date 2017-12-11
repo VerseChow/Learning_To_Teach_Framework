@@ -30,7 +30,7 @@ class MNIST_Model():
         self.start_train_num = -1
         self.student_trajectory = []
         self.reward = []
-        self.T_max = 1000
+        self.T_max = 3000
         self.discount_factor = discount_factor
         self.new_batch_data = [];
         self.new_batch_label = [];
@@ -155,7 +155,7 @@ class MNIST_Model():
                 writer.add_summary(sess.run(sum_all, feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5}), i)
 
     def feature_state(self, label, label_pred, logits, loss, iter_index):
-        self.average_loss = self.average_loss+(loss-self.average_loss)/(1+iter_index)
+        self.average_loss = self.average_loss+(loss-self.average_loss)/(1.0+iter_index)
         self.best_loss = np.minimum(np.amin(logits), self.best_loss)
         margin_value = np.array([])
         # Calculate margin value
@@ -178,8 +178,8 @@ class MNIST_Model():
             feature[i, 0:10] = label[i]
             # Model fearures
             feature[i, 10] = iter_index/self.T_max
-            feature[i, 11] = self.average_loss/self.T_max
-            feature[i, 12] = self.best_loss/self.T_max
+            feature[i, 11] = self.average_loss
+            feature[i, 12] = self.best_loss
             # Combined features
             feature[i, 13:23] = label_pred[i]
             # normalized rank
@@ -232,14 +232,16 @@ class MNIST_Model():
                 self.reward.append(0)
         # terminate trajectory episode and calculate rewards
         if train_accuracy >= 0.90:
-            #tf.reshape(feature_state, [25,1])
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
                 self.reward[-1] = -math.log(len(self.reward)/self.T_max)
-                for t in range(len(self.reward)):
-                    total_return = sum(self.discount_factor**i * j for i, j in enumerate(self.reward[t:]))
-                    # print(len(self.student_trajectory[t]))
-                    self.teacher.update(sess, total_return, self.student_trajectory[t].reshape(1, 25), feature_state)
+                reward = self.reward[-1]
+                trajectory = np.asarray(self.student_trajectory, dtype=np.float32)
+                self.teacher.update(sess, reward, trajectory, feature_state)
+                #for t in range(len(self.reward)):
+                #    total_return = sum(self.discount_factor**i * j for i, j in enumerate(self.reward[t:]))
+                #    # print(len(self.student_trajectory[t]))
+                #    self.teacher.update(sess, total_return, self.student_trajectory[t].reshape(1, 25), feature_state)
 
             re_initialize_para = tf.variables_initializer(self.vars_trainable)
             sess.run(re_initialize_para)
@@ -252,7 +254,6 @@ class MNIST_Model():
                 self.prob: 0.5})
             self.new_batch_data = []
             self.new_batch_label = []
-
         #elif self.start_train_num >0:
         #    print(self.start_train_num)
         #    self.train_step.run(
