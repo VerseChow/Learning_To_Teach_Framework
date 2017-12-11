@@ -14,7 +14,7 @@ train_agent = MNIST_Model()
 with tf.Session() as sess:
     train_agent.train_one_step_setup(x, y, feature_state, sess)
     # clear log
-    shutil.rmtree('./teacherlog')
+    #shutil.rmtree('./teacherlog')
     writer_teacher = tf.summary.FileWriter('./teacherlog', sess.graph)
     with open('reward_cound.txt', 'wb') as txtWriter:
       for i in range(2000000):

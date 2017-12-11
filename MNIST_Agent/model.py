@@ -177,8 +177,10 @@ class MNIST_Model():
 
     def feature_state(self, label, label_pred, logits, loss):
         self.average_loss = self.average_loss+(loss-self.average_loss)/(1.0+float(self.iter_index))
+        print(self.average_loss)
         self.iter_index += 1
-        self.best_loss = np.minimum(np.amin(logits), self.best_loss)
+        #self.best_loss = np.minimum(np.amin(logits), self.best_loss)
+        print(self.best_loss)
         margin_value = np.array([])
         # Calculate margin value
         for i in range(self.batch_size):
@@ -201,8 +203,8 @@ class MNIST_Model():
             feature[i, 0:10] = label[i]
             # Model fearures
             feature[i, 10] = float(indx+i)/self.T_max
-            feature[i, 11] = self.average_loss
-            feature[i, 12] = self.best_loss
+            feature[i, 11] = self.average_loss/self.T_max
+            feature[i, 12] = self.best_loss/self.T_max
             # Combined features
             feature[i, 13:23] = label_pred[i]
             # normalized rank
@@ -213,11 +215,10 @@ class MNIST_Model():
         feature.astype(float)
         return feature
 
-
     def train_one_step_setup(self, x, y, feature_state, sess):
 
         self.label_pred, self.logits, self.loss, self.prob = self.build_model(x, y)
-        self.vars_trainable = tf.trainable_variables()
+        self.vars_trainable = tf.trainable_variables(scope='student_model')
         # Build Teacher Agent
         self.teacher = t.TeacherAgent()
         action_prob, prob = self.teacher.build_model(feature_state)
@@ -242,8 +243,10 @@ class MNIST_Model():
         batch_img = self.mnist.train.images[batch_indexes, :]
         batch_lbl = self.mnist.train.labels[batch_indexes, :]
         [label_pred, logits, loss] = sess.run([self.label_pred, self.logits, self.loss],
-            feed_dict={x: batch_img, y: batch_lbl, self.prob: 1.0})
-
+                                    feed_dict={x: batch_img, y: batch_lbl, self.prob: 1.0})
+        [loss_val, train_accuracy] = sess.run([self.loss, self.accuracy],
+                                    feed_dict={x: self.D_dev_img, y: self.D_dev_lbl, self.prob: 1.0})
+        self.best_loss = np.minimum(loss_val, self.best_loss)
         # feed to teacher agent
         features = self.feature_state(batch_lbl, label_pred, logits, loss)
         action_prob = self.teacher.estimate(sess, features, feature_state)
@@ -258,17 +261,15 @@ class MNIST_Model():
                 self.student_trajectory.append(features[i])
                 self.reward.append(0.0)
         # terminate trajectory episode and calculate rewards
-        [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
-                                                    feed_dict={x: self.D_dev_img, y: self.D_dev_lbl, self.prob: 1.0})
-
         print(' training accuracy %g' % (train_accuracy))
-
-        if train_accuracy >= 0.01:
+        if train_accuracy >= 0.9:
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
                 self.reward[-1] = -math.log(float(len(self.reward))/self.T_max)
                 reward = self.reward[-1]
                 trajectory = np.asarray(self.student_trajectory, dtype=np.float32)
+                #for traj in trajectory:
+                #    traj = traj.reshape((-1, 25))
                 self.teacher.update(sess, reward, trajectory, feature_state, writer_teacher)
                 txtWriter.write(bytes(str(len(self.reward))+'\n', 'UTF-8'))
             re_initialize_para = tf.variables_initializer(self.vars_trainable)
@@ -277,6 +278,8 @@ class MNIST_Model():
             self.student_trajectory.clear()
             self.reward.clear()
             self.iter_index = 0
+            self.average_loss = 0.0
+            self.best_loss = 100.0
 
         if len(self.new_batch_data) == self.batch_size:
             self.train_step.run(
