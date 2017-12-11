@@ -12,7 +12,7 @@ class MNIST_Model():
 
     def __init__(self,
                  training=True,
-                 batch_size=50,
+                 batch_size=20,
                  init_learning_rate=1e-4,
                  num_iterations = 20000,
                  discount_factor = 1,
@@ -27,10 +27,9 @@ class MNIST_Model():
         self.num_iterations = num_iterations
         self.average_loss = 0.0
         self.best_loss = 100.0
-        self.start_train_num = -1
         self.student_trajectory = []
         self.reward = []
-        self.T_max = 3000
+        self.T_max = 10000.0
         self.discount_factor = discount_factor
         self.new_batch_data = [];
         self.new_batch_label = [];
@@ -54,6 +53,8 @@ class MNIST_Model():
         self.D_dev_indexes = temp_train_teach_indexes[:self.D_dev_l]
         self.D_dev_img = self.mnist.train.images[self.D_dev_indexes,:]
         self.D_dev_lbl = self.mnist.train.labels[self.D_dev_indexes]
+
+        self.iter_index = 0
 
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
@@ -90,7 +91,7 @@ class MNIST_Model():
             b_fc = tf.constant(0.1, shape=[num_filters])
             w_fc = tf.Variable(w_fc)
             b_fc = tf.Variable(b_fc)
-            return tf.nn.relu(tf.matmul(x, w_fc)+b_fc, name='relu')
+        return tf.nn.relu(tf.matmul(x, w_fc)+b_fc, name='relu')
 
     def dropout(self, x, name='dropout'):
         with tf.variable_scope(name):
@@ -174,8 +175,9 @@ class MNIST_Model():
                 train_step.run(feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5})
                 writer.add_summary(sess.run(sum_all, feed_dict={x: batch[0], y: batch[1], self.learning_rate: lr, prob: 0.5}), i)
 
-    def feature_state(self, label, label_pred, logits, loss, iter_index):
-        self.average_loss = self.average_loss+(loss-self.average_loss)/(1.0+iter_index)
+    def feature_state(self, label, label_pred, logits, loss):
+        self.average_loss = self.average_loss+(loss-self.average_loss)/(1.0+float(self.iter_index))
+        self.iter_index += 1
         self.best_loss = np.minimum(np.amin(logits), self.best_loss)
         margin_value = np.array([])
         # Calculate margin value
@@ -193,11 +195,12 @@ class MNIST_Model():
         # predefine feature state
         feature = np.zeros([self.batch_size, 25])
         # constuct feature state
+        indx = float((self.iter_index-1)*self.batch_size)
         for i in range(self.batch_size):
             # Date features
             feature[i, 0:10] = label[i]
             # Model fearures
-            feature[i, 10] = iter_index/self.T_max
+            feature[i, 10] = float(indx+i)/self.T_max
             feature[i, 11] = self.average_loss
             feature[i, 12] = self.best_loss
             # Combined features
@@ -231,61 +234,54 @@ class MNIST_Model():
         sess.run(tf.global_variables_initializer())
 
 
-    def train_one_step(self, batch, x, y, feature_state, sess, iteration_index):
+    def train_one_step(self, batch, x, y, feature_state, sess, txtWriter, writer_teacher):
         # get one batch from train_teach
         temp_train_teach_indexes = self.train_teach_indexes[:]
         np.random.shuffle(temp_train_teach_indexes)
         batch_indexes = temp_train_teach_indexes[:self.batch_size]
         batch_img = self.mnist.train.images[batch_indexes, :]
         batch_lbl = self.mnist.train.labels[batch_indexes, :]
-        [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
+        [label_pred, logits, loss] = sess.run([self.label_pred, self.logits, self.loss],
             feed_dict={x: batch_img, y: batch_lbl, self.prob: 1.0})
 
         # feed to teacher agent
-
-        features = self.feature_state(batch_lbl, label_pred, logits, loss, iteration_index)
+        features = self.feature_state(batch_lbl, label_pred, logits, loss)
         action_prob = self.teacher.estimate(sess, features, feature_state)
         # construct new batch of data based on the action_prob
         for i, prob in enumerate(action_prob[0]):
-            #print(prob)
+            # sample action
             action = np.random.choice(2, 1, p=[1.0-prob[0], prob[0]])
-            if action[0] == 1 and len(self.new_batch_data) != 50:
+            if action[0] == 1 and len(self.new_batch_data) != self.batch_size:
                 self.new_batch_data.append(batch_img[i,:])
                 self.new_batch_label.append(batch_lbl[i,:])
                 # append reward and features
                 self.student_trajectory.append(features[i])
-                self.reward.append(0)
+                self.reward.append(0.0)
         # terminate trajectory episode and calculate rewards
         [label_pred, logits, loss, train_accuracy] = sess.run([self.label_pred, self.logits, self.loss, self.accuracy],
-            feed_dict={x: self.D_dev_img, y: self.D_dev_lbl, self.prob: 1.0})
+                                                    feed_dict={x: self.D_dev_img, y: self.D_dev_lbl, self.prob: 1.0})
+
         print(' training accuracy %g' % (train_accuracy))
-        if train_accuracy >= 0.90:
+
+        if train_accuracy >= 0.01:
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
-                self.reward[-1] = -math.log(len(self.reward)/self.T_max)
+                self.reward[-1] = -math.log(float(len(self.reward))/self.T_max)
                 reward = self.reward[-1]
                 trajectory = np.asarray(self.student_trajectory, dtype=np.float32)
-                self.teacher.update(sess, reward, trajectory, feature_state)
-                #for t in range(len(self.reward)):
-                #    total_return = sum(self.discount_factor**i * j for i, j in enumerate(self.reward[t:]))
-                #    # print(len(self.student_trajectory[t]))
-                #    self.teacher.update(sess, total_return, self.student_trajectory[t].reshape(1, 25), feature_state)
-
+                self.teacher.update(sess, reward, trajectory, feature_state, writer_teacher)
+                txtWriter.write(bytes(str(len(self.reward))+'\n', 'UTF-8'))
             re_initialize_para = tf.variables_initializer(self.vars_trainable)
+            # reset
             sess.run(re_initialize_para)
             self.student_trajectory.clear()
             self.reward.clear()
-            #tf.reshape(feature_state, [-1, 25])
-        if len(self.new_batch_data) == 50 and self.start_train_num <=0:
+            self.iter_index = 0
+
+        if len(self.new_batch_data) == self.batch_size:
             self.train_step.run(
                 feed_dict={x: self.new_batch_data, y: self.new_batch_label, self.learning_rate: self.init_learning_rate,
                 self.prob: 0.5})
             self.new_batch_data = []
             self.new_batch_label = []
-        #elif self.start_train_num >0:
-        #    print(self.start_train_num)
-        #    self.train_step.run(
-        #        feed_dict={x: batch[0], y: batch[1], self.learning_rate: self.init_learning_rate,
-        #                   self.prob: 0.5})
-        #    self.start_train_num = self.start_train_num - 1
 

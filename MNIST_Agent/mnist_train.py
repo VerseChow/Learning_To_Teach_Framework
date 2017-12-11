@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data
 from model import *
+import shutil
 
 mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
 x = tf.placeholder(tf.float32, [None, 784])
@@ -12,5 +13,10 @@ train_agent = MNIST_Model()
 
 with tf.Session() as sess:
     train_agent.train_one_step_setup(x, y, feature_state, sess)
-    for i in range(140000):
-        train_agent.train_one_step(mnist.train.next_batch(50), x, y, feature_state, sess, i)
+    # clear log
+    shutil.rmtree('./teacherlog')
+    writer_teacher = tf.summary.FileWriter('./teacherlog', sess.graph)
+    with open('reward_cound.txt', 'wb') as txtWriter:
+      for i in range(2000000):
+          train_agent.train_one_step(mnist.train.next_batch(25), x, y, feature_state, sess,
+                                    txtWriter, writer_teacher)
