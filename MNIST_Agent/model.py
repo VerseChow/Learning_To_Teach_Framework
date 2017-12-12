@@ -280,7 +280,7 @@ class MNIST_Model():
 
 
         # terminate trajectory episode and calculate rewards
-        print(' training accuracy %g' % (train_accuracy))
+        print(' training accuracy %g' % (train_accuracy),"ite",self.iter_index)
         if train_accuracy >= self.train_tao:
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
@@ -302,7 +302,7 @@ class MNIST_Model():
 
         if len(self.new_batch_data) >= self.batch_size:
             self.train_step.run(
-                feed_dict={x: self.new_batch_data, y: self.new_batch_label, self.learning_rate: self.init_learning_rate,
+                feed_dict={x: self.new_batch_data[:self.batch_size], y: self.new_batch_label[:self.batch_size], self.learning_rate: self.init_learning_rate,
                 self.prob: 0.5})
             self.new_batch_data = self.new_batch_data[self.batch_size:]
             self.new_batch_label = self.new_batch_label[self.batch_size:]
