@@ -53,7 +53,7 @@ class TeacherAgent():
         action_prob_tensor = tf.summary.histogram('action_prob', self.action)
         teacher_loss_tensor = tf.summary.scalar('teacher_loss', self.loss)
         self.sum_all = tf.summary.merge([action_prob_tensor, teacher_loss_tensor])
-        self.action = tf.round(self.action)
+        #self.action = tf.round(self.action)
         return self.action, self.prob
 
     def estimate(self, sess, features, feature_state):
