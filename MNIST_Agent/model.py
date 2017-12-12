@@ -55,7 +55,7 @@ class MNIST_Model():
         self.D_dev_lbl = self.mnist.train.labels[self.D_dev_indexes]
 
         self.iter_index = 0
-        self.train_tao = 0.2
+        self.train_tao = 0.9
         self.step_tao = 0.2
         self.initial_tao = self.step_tao
         self.latest_reward = 0
