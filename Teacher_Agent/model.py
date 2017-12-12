@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import os
 class TeacherAgent():
 
     def __init__(self,
@@ -13,7 +13,8 @@ class TeacherAgent():
             self.learning_rate = learning_rate
             self.episode_count = 0.0
             self.average_reward = 0.0
-
+            self.saver = tf.train.Saver(max_to_keep=2)
+            self.pretrained_weight_path = './pretrained_weight_for_teacher'
     def fc(self, x, num, num_filters, bias=0.0, name='fc'):
         with tf.variable_scope(name):
             w_fc = tf.random_uniform(shape=[num, num_filters], minval=-0.01 ,maxval=0.01)
@@ -60,19 +61,37 @@ class TeacherAgent():
         action = sess.run([self.action], feed_dict={feature_state: features, self.prob: 1.0})
         print(action)
         return action
+    def chkpoint_restore(self, sess):
+        
+        
+        ckpt = tf.train.get_checkpoint_state(self.pretrained_weight_path)
+       
+
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            
+            self.saver.restore(sess, os.path.join(self.pretrained_weight_path, ckpt_name))
+            print('[*] Success to read {}'.format(ckpt_name))
+        else:
+         
+            print('[*] Failed to find a checkpoint. Start training from scratch ...')
 
     def update(self, sess, target, features, feature_state, writer_teacher,if_write_teacher = True):
         print ('teacher update')
         self.average_reward = self.average_reward+(target-self.average_reward)/(1.0+self.episode_count)
         self.episode_count += 1.0
+        if self.episode_count == 1.0:
+        	self.chkpoint_restore(sess)
         feed_dict = {feature_state: features, self.prob: 0.5, self.target: target,
                     self.average_reward_tf: self.average_reward}
         _, loss = sess.run([self.train_op, self.loss], feed_dict)
-
+		
         # save log
         if if_write_teacher:
             writer_teacher.add_summary(sess.run(self.sum_all,
                             feed_dict={feature_state: features, self.prob: 0.5, self.target: target,
                             self.average_reward_tf: self.average_reward}), int(self.episode_count))
+            print('Saving checkpoint ...')
+            self.saver.save(sess, self.pretrained_weight_path + '/MNIST.ckpt')   			
         print(loss)
         return loss

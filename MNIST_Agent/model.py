@@ -55,9 +55,11 @@ class MNIST_Model():
         self.D_dev_lbl = self.mnist.train.labels[self.D_dev_indexes]
 
         self.iter_index = 0
-        self.train_tao = 0.9
+        self.train_tao = 0.2
         self.step_tao = 0.2
         self.initial_tao = self.step_tao
+        self.latest_reward = 0
+        self.latest_episode_length = 0
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
         if self.training:
@@ -280,12 +282,14 @@ class MNIST_Model():
                     self.reward.append(0.0)
                 '''
         # terminate trajectory episode and calculate rewards
-        print(' training accuracy %g' % (train_accuracy),"ite",self.iter_index)
+        print(' training accuracy %g' % (train_accuracy),"ite",self.iter_index,"last_reward",self.latest_reward,"last_epi_length",self.latest_episode_length)
         if train_accuracy >= self.train_tao:
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
                 self.reward[-1] = -math.log(float(len(self.reward))/self.T_max)
                 reward = self.reward[-1]
+                self.latest_reward = reward
+                self.latest_episode_length = len(self.reward)
                 trajectory = np.asarray(self.student_trajectory, dtype=np.float32)
                 #for traj in trajectory:
                 #    traj = traj.reshape((-1, 25))
