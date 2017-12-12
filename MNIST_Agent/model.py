@@ -55,7 +55,9 @@ class MNIST_Model():
         self.D_dev_lbl = self.mnist.train.labels[self.D_dev_indexes]
 
         self.iter_index = 0
-
+        self.train_tao = 0.93
+        self.step_tao = 0.2
+        self.initial_tao = self.step_tao
     def chkpoint_restore(self, sess):
         saver = tf.train.Saver(max_to_keep=2)
         if self.training:
@@ -254,15 +256,32 @@ class MNIST_Model():
         for i, prob in enumerate(action_prob[0]):
             # sample action
             action = np.random.choice(2, 1, p=[1.0-prob[0], prob[0]])
-            if action[0] == 1 and len(self.new_batch_data) != self.batch_size:
+            if action[0] == 1 :#and len(self.new_batch_data) != self.batch_size
                 self.new_batch_data.append(batch_img[i,:])
                 self.new_batch_label.append(batch_lbl[i,:])
                 # append reward and features
                 self.student_trajectory.append(features[i])
                 self.reward.append(0.0)
+                '''
+                if train_accuracy >= self.step_tao:
+                    print("update teacher")
+                    print("self.step_tao",self.step_tao)
+                    temp_reward = -math.log(float(len(self.reward))/self.T_max)
+                    self.reward.append(temp_reward)
+                    self.step_tao = max(self.train_tao-0.1,self.step_tao+0.1)
+                    reward = self.reward[-1]
+                    trajectory = np.asarray(self.student_trajectory, dtype=np.float32)
+                    #for traj in trajectory:
+                    #    traj = traj.reshape((-1, 25))
+                    self.teacher.update(sess, reward, trajectory, feature_state, writer_teacher,False)
+                else:
+                    self.reward.append(0.0)
+                '''
+
+
         # terminate trajectory episode and calculate rewards
         print(' training accuracy %g' % (train_accuracy))
-        if train_accuracy >= 0.9:
+        if train_accuracy >= self.train_tao:
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
                 self.reward[-1] = -math.log(float(len(self.reward))/self.T_max)
@@ -281,10 +300,10 @@ class MNIST_Model():
             self.average_loss = 0.0
             self.best_loss = 100.0
 
-        if len(self.new_batch_data) == self.batch_size:
+        if len(self.new_batch_data) >= self.batch_size:
             self.train_step.run(
                 feed_dict={x: self.new_batch_data, y: self.new_batch_label, self.learning_rate: self.init_learning_rate,
                 self.prob: 0.5})
-            self.new_batch_data = []
-            self.new_batch_label = []
+            self.new_batch_data = self.new_batch_data[self.batch_size:]
+            self.new_batch_label = self.new_batch_label[self.batch_size:]
 

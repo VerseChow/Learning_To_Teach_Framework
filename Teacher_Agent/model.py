@@ -41,7 +41,7 @@ class TeacherAgent():
             fc1 = self.fc(x, 25, 12, name='fc1')
             dpout, self.prob = self.dropout(fc1, name='dropout')
             tanh1 = tf.nn.tanh(dpout, name='tanh')
-            fc2 = self.fc(tanh1, 12, 1, bias=2.0, name='fc2')
+            fc2 = self.fc(tanh1, 12, 1, bias=0.0, name='fc2')
             self.action = tf.nn.sigmoid(fc2, name='sigmoid')
             logits = -tf.log(self.action) * (self.target-self.average_reward_tf)
             self.loss = tf.reduce_sum(logits)
@@ -53,6 +53,7 @@ class TeacherAgent():
         action_prob_tensor = tf.summary.histogram('action_prob', self.action)
         teacher_loss_tensor = tf.summary.scalar('teacher_loss', self.loss)
         self.sum_all = tf.summary.merge([action_prob_tensor, teacher_loss_tensor])
+        self.action = tf.round(self.action)
         return self.action, self.prob
 
     def estimate(self, sess, features, feature_state):
@@ -60,7 +61,7 @@ class TeacherAgent():
         print(action)
         return action
 
-    def update(self, sess, target, features, feature_state, writer_teacher):
+    def update(self, sess, target, features, feature_state, writer_teacher,if_write_teacher = True):
         print ('teacher update')
         self.average_reward = self.average_reward+(target-self.average_reward)/(1.0+self.episode_count)
         self.episode_count += 1.0
@@ -69,8 +70,9 @@ class TeacherAgent():
         _, loss = sess.run([self.train_op, self.loss], feed_dict)
 
         # save log
-        writer_teacher.add_summary(sess.run(self.sum_all,
-                        feed_dict={feature_state: features, self.prob: 0.5, self.target: target,
-                        self.average_reward_tf: self.average_reward}), int(self.episode_count))
+        if if_write_teacher:
+            writer_teacher.add_summary(sess.run(self.sum_all,
+                            feed_dict={feature_state: features, self.prob: 0.5, self.target: target,
+                            self.average_reward_tf: self.average_reward}), int(self.episode_count))
         print(loss)
         return loss
