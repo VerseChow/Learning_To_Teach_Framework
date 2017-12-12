@@ -16,7 +16,7 @@ with tf.Session() as sess:
     # clear log
     #shutil.rmtree('./teacherlog')
     writer_teacher = tf.summary.FileWriter('./teacherlog', sess.graph)
-    with open('reward_cound.txt', 'wb') as txtWriter:
+    with open('reward_count.txt', 'wb') as txtWriter:
       for i in range(2000000):
           train_agent.train_one_step(mnist.train.next_batch(25), x, y, feature_state, sess,
                                     txtWriter, writer_teacher)
