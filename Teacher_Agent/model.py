@@ -41,7 +41,7 @@ class TeacherAgent():
             fc1 = self.fc(x, 25, 12, name='fc1')
             dpout, self.prob = self.dropout(fc1, name='dropout')
             tanh1 = tf.nn.tanh(dpout, name='tanh')
-            fc2 = self.fc(tanh1, 12, 1, bias=0.0, name='fc2')
+            fc2 = self.fc(tanh1, 12, 1, bias=2.0, name='fc2')
             self.action = tf.nn.sigmoid(fc2, name='sigmoid')
             logits = -tf.log(self.action) * (self.target-self.average_reward_tf)
             self.loss = tf.reduce_sum(logits)

@@ -29,7 +29,7 @@ class MNIST_Model():
         self.best_loss = 100.0
         self.student_trajectory = []
         self.reward = []
-        self.T_max = 10000.0
+        self.T_max = 60000.0
         self.discount_factor = discount_factor
         self.new_batch_data = [];
         self.new_batch_label = [];
@@ -55,7 +55,7 @@ class MNIST_Model():
         self.D_dev_lbl = self.mnist.train.labels[self.D_dev_indexes]
 
         self.iter_index = 0
-        self.train_tao = 0.93
+        self.train_tao = 0.9
         self.step_tao = 0.2
         self.initial_tao = self.step_tao
     def chkpoint_restore(self, sess):
@@ -87,13 +87,13 @@ class MNIST_Model():
             x = tf.layers.max_pooling2d(x, 2, 2, name='pool')
             return tf.nn.relu(x, name='relu')
 
-    def fc_relu(self, x, num, num_filters, name='fc_relu'):
+    def fc(self, x, num, num_filters, name='fc'):
         with tf.variable_scope(name):
             w_fc = tf.truncated_normal(shape=[num, num_filters], stddev=0.1)
             b_fc = tf.constant(0.1, shape=[num_filters])
             w_fc = tf.Variable(w_fc)
             b_fc = tf.Variable(b_fc)
-        return tf.nn.relu(tf.matmul(x, w_fc)+b_fc, name='relu')
+        return tf.matmul(x, w_fc)+b_fc
 
     def dropout(self, x, name='dropout'):
         with tf.variable_scope(name):
@@ -104,21 +104,23 @@ class MNIST_Model():
     def build_model(self, x, y):
         with tf.variable_scope('student_model'):
 
-            with tf.name_scope('reshape'):
-                x = tf.reshape(x, [-1, 28, 28, 1])
+#            with tf.name_scope('reshape'):
+#                x = tf.reshape(x, [-1, 28, 28, 1])
+#
+#            cov1 = self.conv_pool(x, 32, name='conv_pool1')
+#
+#            cov2 = self.conv_pool(cov1, 64, name='conv_pool2')
 
-            cov1 = self.conv_pool(x, 32, name='conv_pool1')
+#            with tf.name_scope('flatten'):
+#                flatten = tf.layers.flatten(cov2)
 
-            cov2 = self.conv_pool(cov1, 64, name='conv_pool2')
-
-            with tf.name_scope('flatten'):
-                flatten = tf.layers.flatten(cov2)
-
-            fc1 = self.fc_relu(flatten, 7*7*64, 1024, name='fc_relu1')
+            fc1 = self.fc(x, 784, 500, name='fc1')
 
             dpout, prob = self.dropout(fc1, name='dropout')
 
-            fc2 = self.fc_relu(dpout, 1024, 10, name='fc_relu1')
+            tanh1 = tf.nn.tanh(dpout, name='tanh1')
+
+            fc2 = self.fc(tanh1, 500, 10, name='fc2')
 
             logits = tf.nn.softmax_cross_entropy_with_logits(labels=y, logits=fc2)
 
@@ -205,8 +207,8 @@ class MNIST_Model():
             feature[i, 0:10] = label[i]
             # Model fearures
             feature[i, 10] = float(indx+i)/self.T_max
-            feature[i, 11] = self.average_loss/self.T_max
-            feature[i, 12] = self.best_loss/self.T_max
+            feature[i, 11] = self.average_loss
+            feature[i, 12] = self.best_loss
             # Combined features
             feature[i, 13:23] = label_pred[i]
             # normalized rank
@@ -277,8 +279,6 @@ class MNIST_Model():
                 else:
                     self.reward.append(0.0)
                 '''
-
-
         # terminate trajectory episode and calculate rewards
         print(' training accuracy %g' % (train_accuracy),"ite",self.iter_index)
         if train_accuracy >= self.train_tao:
@@ -302,8 +302,10 @@ class MNIST_Model():
 
         if len(self.new_batch_data) >= self.batch_size:
             self.train_step.run(
-                feed_dict={x: self.new_batch_data[:self.batch_size], y: self.new_batch_label[:self.batch_size], self.learning_rate: self.init_learning_rate,
-                self.prob: 0.5})
+                feed_dict={x: self.new_batch_data[:self.batch_size],
+                            y: self.new_batch_label[:self.batch_size],
+                            self.learning_rate: self.init_learning_rate,
+                            self.prob: 0.5})
             self.new_batch_data = self.new_batch_data[self.batch_size:]
             self.new_batch_label = self.new_batch_label[self.batch_size:]
 
