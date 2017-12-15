@@ -20,3 +20,5 @@ with tf.Session() as sess:
       for i in range(2000000):
           train_agent.train_one_step(mnist.train.next_batch(25), x, y, feature_state, sess,
                                     txtWriter, writer_teacher)
+          if accuracy > 0.9 and train_agent.teacher_training == False:
+              break

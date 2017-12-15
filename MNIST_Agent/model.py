@@ -11,13 +11,15 @@ from tensorflow.examples.tutorials.mnist import input_data
 class MNIST_Model():
 
     def __init__(self,
-                 training=True,
-                 batch_size=20,
-                 init_learning_rate=1e-4,
+                 training = True,
+                 batch_size = 20,
+                 init_learning_rate = 1e-4,
                  num_iterations = 20000,
                  discount_factor = 1,
-                 reuse=None):
+                 teacher_training = True,
+                 reuse = None):
         self.training = training
+        self.teacher_training = teacher_training
         self.reuse = reuse
         self.batch_size = batch_size
         self.init_learning_rate = init_learning_rate
@@ -220,7 +222,11 @@ class MNIST_Model():
         self.vars_trainable = tf.trainable_variables(scope='student_model')
         # Build Teacher Agent
         self.teacher = t.TeacherAgent()
+
         action_prob, prob = self.teacher.build_model(feature_state)
+
+        if self.teacher_training == False:
+            self.teacher.chkpoint_restore(sess, path = './pretrained_weight_for_teacher')
 
         with tf.name_scope('accuracy'):
             correct_prediction = tf.equal(tf.argmax(self.label_pred, -1), tf.argmax(y, -1))
@@ -276,7 +282,7 @@ class MNIST_Model():
                 '''
         # terminate trajectory episode and calculate rewards
         print(' training accuracy %g' % (train_accuracy),"ite",self.iter_index,"last_reward",self.latest_reward,"last_epi_length",self.latest_episode_length)
-        if train_accuracy >= self.train_tao:
+        if train_accuracy >= self.train_tao and self.teacher_training == True:
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
                 self.reward[-1] = -math.log(float(len(self.reward))/self.T_max)
@@ -305,4 +311,4 @@ class MNIST_Model():
                             self.prob: 0.5})
             self.new_batch_data = self.new_batch_data[self.batch_size:]
             self.new_batch_label = self.new_batch_label[self.batch_size:]
-
+        return train_accuracy

@@ -13,8 +13,6 @@ class TeacherAgent():
             self.learning_rate = learning_rate
             self.episode_count = 0.0
             self.average_reward = 0.0
-
-            self.pretrained_weight_path = './pretrained_weight_for_teacher'
             self.choose_mnist_teach = choose_mnist_teach
 
     def fc(self, x, num, num_filters, bias=0.0, name='fc'):
@@ -69,20 +67,14 @@ class TeacherAgent():
         action = sess.run([self.action], feed_dict={feature_state: features, self.prob: 1.0})
         print(action)
         return action
-    def chkpoint_restore(self, sess):
-        
-        
-        ckpt = tf.train.get_checkpoint_state(self.pretrained_weight_path)
-       
 
+    def chkpoint_restore(self, sess, path = './pretrained_weight_path'):
+        ckpt = tf.train.get_checkpoint_state(path)
         if ckpt and ckpt.model_checkpoint_path:
             ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-            
-            self.saver.restore(sess, os.path.join(self.pretrained_weight_path, ckpt_name))
+            self.saver.restore(sess, os.path.join(path, ckpt_name))
             print('[*] Success to read {}'.format(ckpt_name))
-            #exit(0) #verify load only part work
         else:
-         
             print('[*] Failed to find a checkpoint. Start training from scratch ...')
 
     def update(self, sess, target, features, feature_state, writer_teacher,if_write_teacher = True):
@@ -94,7 +86,7 @@ class TeacherAgent():
         feed_dict = {feature_state: features, self.prob: 1.0, self.target: target,
                     self.average_reward_tf: self.average_reward}
         _, loss = sess.run([self.train_op, self.loss], feed_dict)
-		
+
         # save log
         if if_write_teacher:
             writer_teacher.add_summary(sess.run(self.sum_all,

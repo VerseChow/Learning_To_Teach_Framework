@@ -114,12 +114,12 @@ def read_in_all_images(address_list, shuffle=True, is_random_label = False):
 
 '''
 def horizontal_flip(image, axis):
-    
+
     #Flip an image at 50% possibility
     #:param image: a 3 dimensional numpy array representing an image
     #:param axis: 0 for vertical flip and 1 for horizontal flip
     #:return: 3D image after flip
-    
+
     flip_prop = np.random.randint(low=0, high=2)
     if flip_prop == 0:
         image = cv2.flip(image, axis)
@@ -173,10 +173,10 @@ def prepare_train_data(padding_size):
     for i in range(1, NUM_TRAIN_BATCH+1):
         path_list.append(full_data_dir + str(i))
     data, label = read_in_all_images(path_list, is_random_label=TRAIN_RANDOM_LABEL)
-    
+
     pad_width = ((0, 0), (padding_size, padding_size), (padding_size, padding_size), (0, 0))
     data = np.pad(data, pad_width=pad_width, mode='constant', constant_values=0)
-    
+
     return data, label
 
 

@@ -13,7 +13,7 @@ from cifar10_input import *
 import pandas as pd
 import math
 class CIFAR_Model():
-    def __init__(self):
+    def __init__(self, teacher_training = True):
         # Set up all the placeholders
         self.batch_size = FLAGS.train_batch_size
         self.iter_index = 0
@@ -46,6 +46,8 @@ class CIFAR_Model():
         self.train_teach_data = self.all_data[self.train_teach_indexes,...]
         self.train_teach_label = self.all_labels[self.train_teach_indexes,...]
         self.placeholders()
+        self.teacher_training = teacher_training
+
     def placeholders(self):
         '''
         There are five placeholders in total.
@@ -504,7 +506,12 @@ class CIFAR_Model():
         self.build_model()
         self.vars_trainable = tf.trainable_variables(scope='resnet')
         self.teacher = t.TeacherAgent()
+
         action_prob, prob = self.teacher.build_model(feature_state)
+
+        if self.teacher_training == False:
+            self.teacher.chkpoint_restore(sess, path = './pretrained_weight_for_teacher')
+
         y = tf.one_hot(self.label_placeholder,10)
         #for training
         with tf.name_scope('accuracy'):
@@ -527,13 +534,10 @@ class CIFAR_Model():
 
     def train_one_step(self, x, y, feature_state, sess, txtWriter, writer_teacher):
 
-
-
-
         # get one batch from train_teachs
         batch_img, batch_lbl = self.generate_augment_train_batch_fit(self.train_teach_data,
-                                                                                     self.train_teach_label,
-                                                                                     FLAGS.train_batch_size)
+                                                                     self.train_teach_label,
+                                                                     FLAGS.train_batch_size)
         [label_pred, logits, loss] = sess.run([self.label_pred, self.logits, self.loss_v],
                                     feed_dict={self.image_placeholder: batch_img, self.label_placeholder: batch_lbl, self.lr_placeholder: FLAGS.init_lr})
 
@@ -553,9 +557,11 @@ class CIFAR_Model():
                 # append reward and features
                 self.student_trajectory.append(features[i])
                 self.reward.append(0.0)
+                # write accuracy
+                txtWriter.write(bytes(str(train_accuracy)+'\n', 'UTF-8'))
         # terminate trajectory episode and calculate rewards
         print(' training accuracy %g' % (train_accuracy),"ite",self.iter_index,"last_reward",self.latest_reward,"last_epi_length",self.latest_episode_length)
-        if train_accuracy >= self.train_tao:
+        if train_accuracy >= self.train_tao and self.teacher_training == True:
             print(' length of reward %g' % len(self.reward))
             if len(self.reward) > 0:
                 self.reward[-1] = -math.log(float(len(self.reward))/self.T_max)
@@ -586,4 +592,5 @@ class CIFAR_Model():
                       self.lr_placeholder: FLAGS.init_lr})
             self.new_batch_data = self.new_batch_data[FLAGS.train_batch_size:]
             self.new_batch_label = self.new_batch_label[FLAGS.train_batch_size:]
+        return train_accuracy
 
