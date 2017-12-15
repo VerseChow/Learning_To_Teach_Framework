@@ -101,16 +101,6 @@ class MNIST_Model():
     def build_model(self, x, y):
         with tf.variable_scope('student_model'):
 
-#            with tf.name_scope('reshape'):
-#                x = tf.reshape(x, [-1, 28, 28, 1])
-#
-#            cov1 = self.conv_pool(x, 32, name='conv_pool1')
-#
-#            cov2 = self.conv_pool(cov1, 64, name='conv_pool2')
-
-#            with tf.name_scope('flatten'):
-#                flatten = tf.layers.flatten(cov2)
-
             fc1 = self.fc(x, 784, 500, name='fc1')
 
             dpout, prob = self.dropout(fc1, name='dropout')
@@ -265,21 +255,7 @@ class MNIST_Model():
                 # append reward and features
                 self.student_trajectory.append(features[i])
                 self.reward.append(0.0)
-                '''
-                if train_accuracy >= self.step_tao:
-                    print("update teacher")
-                    print("self.step_tao",self.step_tao)
-                    temp_reward = -math.log(float(len(self.reward))/self.T_max)
-                    self.reward.append(temp_reward)
-                    self.step_tao = max(self.train_tao-0.1,self.step_tao+0.1)
-                    reward = self.reward[-1]
-                    trajectory = np.asarray(self.student_trajectory, dtype=np.float32)
-                    #for traj in trajectory:
-                    #    traj = traj.reshape((-1, 25))
-                    self.teacher.update(sess, reward, trajectory, feature_state, writer_teacher,False)
-                else:
-                    self.reward.append(0.0)
-                '''
+
         # terminate trajectory episode and calculate rewards
         print(' training accuracy %g' % (train_accuracy),"ite",self.iter_index,"last_reward",self.latest_reward,"last_epi_length",self.latest_episode_length)
         if train_accuracy >= self.train_tao and self.teacher_training == True:
