@@ -5,7 +5,7 @@ class TeacherAgent():
     def __init__(self,
                 training=True,
                 reuse=None,
-                learning_rate=0.001):
+                learning_rate=0.001,choose_mnist_teach=True):
             self.training = training
             self.reuse = reuse
             self.target = tf.placeholder(dtype=tf.float32, name="target")
@@ -13,8 +13,10 @@ class TeacherAgent():
             self.learning_rate = learning_rate
             self.episode_count = 0.0
             self.average_reward = 0.0
-            self.saver = tf.train.Saver(max_to_keep=2)
+
             self.pretrained_weight_path = './pretrained_weight_for_teacher'
+            self.choose_mnist_teach = choose_mnist_teach
+
     def fc(self, x, num, num_filters, bias=0.0, name='fc'):
         with tf.variable_scope(name):
             w_fc = tf.random_uniform(shape=[num, num_filters], minval=-0.01 ,maxval=0.01)
@@ -55,6 +57,12 @@ class TeacherAgent():
         teacher_loss_tensor = tf.summary.scalar('teacher_loss', self.loss)
         self.sum_all = tf.summary.merge([action_prob_tensor, teacher_loss_tensor])
         #self.action = tf.round(self.action)
+        if self.choose_mnist_teach:
+            self.vars_trainable = tf.trainable_variables(scope='student_model')
+        else:
+            self.vars_trainable = tf.trainable_variables(scope='resnet')
+        self.teacher_vars_trainable = tf.trainable_variables(scope='teacher_model')
+        self.saver = tf.train.Saver({v.op.name: v for v in self.teacher_vars_trainable}, max_to_keep=2)
         return self.action, self.prob
 
     def estimate(self, sess, features, feature_state):
@@ -72,6 +80,7 @@ class TeacherAgent():
             
             self.saver.restore(sess, os.path.join(self.pretrained_weight_path, ckpt_name))
             print('[*] Success to read {}'.format(ckpt_name))
+            #exit(0) #verify load only part work
         else:
          
             print('[*] Failed to find a checkpoint. Start training from scratch ...')
@@ -82,16 +91,17 @@ class TeacherAgent():
         self.episode_count += 1.0
         if self.episode_count == 1.0:
         	self.chkpoint_restore(sess)
-        feed_dict = {feature_state: features, self.prob: 0.5, self.target: target,
+        feed_dict = {feature_state: features, self.prob: 1.0, self.target: target,
                     self.average_reward_tf: self.average_reward}
         _, loss = sess.run([self.train_op, self.loss], feed_dict)
 		
         # save log
         if if_write_teacher:
             writer_teacher.add_summary(sess.run(self.sum_all,
-                            feed_dict={feature_state: features, self.prob: 0.5, self.target: target,
+                            feed_dict={feature_state: features, self.prob: 1.0, self.target: target,
                             self.average_reward_tf: self.average_reward}), int(self.episode_count))
             print('Saving checkpoint ...')
-            self.saver.save(sess, self.pretrained_weight_path + '/MNIST.ckpt')   			
-        print(loss)
+
+            self.saver.save(sess, self.pretrained_weight_path + '/MNIST.ckpt')
+        print("loss",loss)
         return loss

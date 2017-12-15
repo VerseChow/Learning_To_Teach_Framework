@@ -40,13 +40,6 @@ class MNIST_Model():
         self.half_l = int(self.mnist.train.images.shape[0] / 2)
         self.train_teach_indexes = self.mnist_indexes[:self.half_l]
         self.train_student_indexes = self.mnist_indexes[self.half_l:]
-        '''
-        #this shows how to read minist data
-        self.mnist_train_teach_img = mnist.train.images[:half_l,:]
-        self.mnist_train_teach_lbl = mnist.train.labels[:half_l,:]
-        self.mnist_train_stud_img = mnist.train.images[half_l:, :]
-        self.mnist_train_stud_lbl = mnist.train.labels[half_l:, :]
-        '''
         self.D_dev_l = int(self.half_l * 0.05)
         temp_train_teach_indexes = self.train_teach_indexes[:]  # deep copy
         np.random.shuffle(temp_train_teach_indexes)
@@ -55,7 +48,7 @@ class MNIST_Model():
         self.D_dev_lbl = self.mnist.train.labels[self.D_dev_indexes]
 
         self.iter_index = 0
-        self.train_tao = 0.9
+        self.train_tao = 0.93
         self.step_tao = 0.2
         self.initial_tao = self.step_tao
         self.latest_reward = 0

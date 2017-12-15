@@ -28,7 +28,7 @@ class CIFAR_Model():
         self.new_batch_label = [];
         self.latest_reward = 0
         self.latest_episode_length = 0
-        self.train_tao = 0.4
+        self.train_tao = 0.8
         self.all_data, self.all_labels = prepare_train_data(padding_size=FLAGS.padding_size)
         self.cifar_l = EPOCH_SIZE
         self.cifar_indexes = list(range(self.cifar_l))
