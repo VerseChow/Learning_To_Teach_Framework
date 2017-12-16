@@ -22,5 +22,9 @@ Our pipleline is for training a teacher agent to guide a student agent learn mor
 3. training will stop as long as student gets to 90% accuracy
 4. for testing based on `CIFAR`, the testing accuracy for training will be saved in `accuracy.txt`
 
+### Use of Tensorboard:
+1. You can use tensorboard with each experiments.
+2. Find the teacherlog folder for each agent folder such as MNIST_Agent/teacherlog, then use tensorboard command:
+3. tensorboard --logdir=./teacherlog
 ## Advanced Usage
 For advanced usage, you can go to `CIFAR_Agent` or `MNIST_Agent` folder to check the detailed code
