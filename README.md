@@ -14,11 +14,13 @@ Our pipleline is for training a teacher agent to guide a student agent learn mor
 ### Train Teacher Agent
 1. run `./trainTeacher.sh <dataset>`, the option of dataset is `CIFAR` or `MNIST`
 2. trained weight is saved in the folder `<dataset>_Agent/pretrained_weight_for_teacher`
+3. for training based on MNIST, the length of each trajectory will be saved in `reward_count.txt`
 
 ### Test Teacher Agent
 1. run `./testTeacher.sh <dataset>`, the option of dataset is `CIFAR` or `MNIST`
 2. make sure in the folder `<dataset>_Agent/pretrained_weight_for_teacher` contains pretrained weight
 3. training will stop as long as student gets to 90% accuracy
+4. for testing based on `CIFAR`, the testing accuracy for training will be saved in `accuracy.txt`
 
 ## Advanced Usage
 For advanced usage, you can go to `CIFAR_Agent` or `MNIST_Agent` folder to check the detailed code

@@ -33,7 +33,6 @@ if __name__ == "__main__":
   # Initialize the Train object
   train_agent = CIFAR_Model(teacher_training = args.teacher_flg)
   # Start the training session
-  #train_agent.train()
   print("this is cifar")
 
   with tf.Session() as sess:
