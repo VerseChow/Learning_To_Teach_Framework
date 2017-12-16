@@ -10,7 +10,7 @@ case $MODEL in
     sudo python3 cifar_train.py --teacher_flg False
   ;;
   MNIST)
-		cd ./CIFAR_Agent
+		cd ./MNIST_Agent
 		sudo python3 mnist_train.py --teacher_flg False
   ;;
   *)

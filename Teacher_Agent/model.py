@@ -14,6 +14,7 @@ class TeacherAgent():
             self.episode_count = 0.0
             self.average_reward = 0.0
             self.choose_mnist_teach = choose_mnist_teach
+            self.pretrained_weight_path = './pretrained_weight_for_teacher'
 
     def fc(self, x, num, num_filters, bias=0.0, name='fc'):
         with tf.variable_scope(name):
